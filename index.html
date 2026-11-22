@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>GIF Forge</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--bg:#07090f;--panel:#0d1220;--line:#1c2740;--cy:#39e6ff;--mg:#ff3d81;--tx:#e8f0ff;--dim:#8fa3c8}
+html,body{height:100%}
+body{background:var(--bg);color:var(--tx);font-family:-apple-system,'Segoe UI',Roboto,sans-serif;overflow-x:hidden;
+padding-bottom:env(safe-area-inset-bottom)}
+#bgfx{position:fixed;inset:0;z-index:0;background:
+radial-gradient(900px 500px at 15% -10%,rgba(57,230,255,.10),transparent 60%),
+radial-gradient(800px 500px at 90% 110%,rgba(255,61,129,.10),transparent 60%)}
+.wrap{position:relative;z-index:1;max-width:560px;margin:0 auto;padding:14px 14px 90px}
+h1{font-size:24px;letter-spacing:3px;text-align:center;margin:14px 0 2px;
+background:linear-gradient(90deg,var(--cy),var(--mg));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{text-align:center;color:var(--dim);font-size:12px;margin-bottom:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+button{border:0;border-radius:12px;padding:13px 16px;font-size:14px;font-weight:700;letter-spacing:.6px;color:#04121a;background:var(--cy);width:100%}
+button.sec{background:#152035;color:var(--tx);border:1px solid var(--line)}
+button.mg{background:var(--mg);color:#fff}
+button:disabled{opacity:.4}
+.row{display:flex;gap:8px}.row>*{flex:1}
+input,textarea,select{width:100%;background:#0a0f1c;border:1px solid var(--line);border-radius:10px;color:var(--tx);padding:11px;font-size:14px}
+textarea{min-height:74px;resize:vertical}
+label.lb{display:block;font-size:11px;letter-spacing:1.4px;color:var(--dim);margin:10px 0 5px;text-transform:uppercase}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chip{padding:7px 11px;border-radius:999px;border:1px solid var(--line);color:var(--dim);font-size:12px}
+.chip.on{border-color:var(--cy);color:var(--cy);background:rgba(57,230,255,.08)}
+#tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;background:rgba(7,9,15,.92);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:6px 10px env(safe-area-inset-bottom)}
+#tabs button{background:none;color:var(--dim);font-size:11px;letter-spacing:1px;padding:8px 2px}
+#tabs button.on{color:var(--cy)}
+#status{font-size:12px;color:var(--dim);min-height:16px;margin:8px 0}
+#status.err{color:#ff7a7a}
+.strip{display:flex;gap:6px;overflow-x:auto;padding:6px 0}
+.strip canvas{height:86px;border-radius:8px;border:1px solid var(--line)}
+#gifPrev{max-width:100%;border-radius:12px;display:block;margin:10px auto 0}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.grid img{width:100%;border-radius:10px;border:1px solid var(--line)}
+.gitem{position:relative}
+.gitem .del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#ff8b8b;border-radius:8px;padding:2px 7px;font-size:12px}
+.ord{display:flex;align-items:center;gap:8px;background:#0a0f1c;border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:6px}
+.ord img{height:44px;border-radius:6px}
+.ord .nm{flex:1;font-size:12px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ord button{width:34px;padding:7px 0;font-size:13px}
+.hide{display:none}
+#vprev{width:100%;border-radius:12px;display:none;margin-top:10px}
+.tiny{font-size:11px;color:var(--dim);margin-top:8px;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="bgfx"></div>
+
+<div id="setup" class="wrap">
+  <h1>GIF FORGE</h1>
+  <div class="sub">AI image frames → animated gifs → edits synced to your music</div>
+  <div class="card">
+    <label class="lb">Gemini API key (stays on this device)</label>
+    <input id="kin" type="password" placeholder="paste your Google AI Studio key" autocomplete="off">
+    <div style="height:10px"></div>
+    <button id="kgo">START</button>
+    <div id="kstat" class="tiny"></div>
+  </div>
+  <div class="card tiny">GIF Forge also works with no AI at all: add your own photos as frames and it turns them into gifs. The AI shot generator uses your free Gemini key, image requests only.</div>
+</div>
+
+<div id="app" class="wrap hide">
+  <h1>GIF FORGE</h1>
+  <div class="sub">make frames → gif → stitch to music</div>
+
+  <div id="tab-make">
+    <div class="card">
+      <label class="lb">Shot prompt</label>
+      <textarea id="prompt" placeholder="e.g. a neon-soaked city street at night, rain on the asphalt, cinematic"></textarea>
+      <div class="chips" id="chips"></div>
+      <div class="row" style="margin-top:10px">
+        <div><label class="lb">Frames</label><select id="nf"><option>3</option><option>4</option><option selected>5</option><option>6</option><option>8</option></select></div>
+        <div><label class="lb">Speed</label><select id="fps"><option value="500">2 fps (slow)</option><option value="250">4 fps</option><option value="167" selected>6 fps</option><option value="125">8 fps (fast)</option></select></div>
+      </div>
+      <div style="height:10px"></div>
+      <button id="gen">GENERATE AI FRAMES</button>
+      <div style="height:8px"></div>
+      <button class="sec" id="own">USE MY OWN IMAGES INSTEAD</button>
+      <input id="ownf" type="file" accept="image/*" multiple class="hide">
+      <div id="status"></div>
+      <div class="strip" id="strip"></div>
+      <button class="mg hide" id="mk">MAKE THE GIF</button>
+      <div class="hide" id="gifbox">
+        <img id="gifPrev" alt="gif preview">
+        <div class="row" style="margin-top:10px">
+          <button class="sec" id="dl">DOWNLOAD GIF</button>
+          <button id="save">SAVE TO BOARD</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-gifs" class="hide">
+    <div class="card">
+      <label class="lb">GIF board (saved on this device)</label>
+      <div class="grid" id="grid"></div>
+      <div id="gempty" class="tiny">No gifs yet. Make one in the Make tab and hit SAVE TO BOARD.</div>
+      <div class="tiny">Tap a gif to download it. Stitch mode in the Edit tab uses gifs you made or imported this session.</div>
+    </div>
+  </div>
+
+  <div id="tab-edit" class="hide">
+    <div class="card">
+      <label class="lb">Your music</label>
+      <input id="mus" type="file" accept="audio/*">
+      <div id="mstat" class="tiny"></div>
+      <label class="lb">Pacing</label>
+      <select id="pace"><option value="1">cut every beat</option><option value="2" selected>every 2 beats</option><option value="4">every 4 beats</option></select>
+      <label class="lb">Frame</label>
+      <select id="shape"><option value="v">vertical (9:16)</option><option value="w">wide (16:9)</option><option value="s">square</option></select>
+      <div style="height:10px"></div>
+      <button class="sec" id="imp">IMPORT GIF FILES</button>
+      <input id="impf" type="file" accept="image/gif" multiple class="hide">
+      <div id="ord"></div>
+      <div id="estatus" class="tiny"></div>
+      <div style="height:10px"></div>
+      <button class="mg" id="exp" disabled>EXPORT THE EDIT</button>
+      <video id="vprev" controls playsinline></video>
+      <div class="tiny">Cuts snap to the song's beats. Gifs loop until their cut. The exported clip saves straight to your downloads.</div>
+    </div>
+  </div>
+</div>
+
+<div id="tabs" class="hide">
+  <button data-t="make" class="on">MAKE</button>
+  <button data-t="gifs">GIFS</button>
+  <button data-t="edit">EDIT</button>
+</div>
+
+<script type="module">
+import {GIFEncoder,quantize,applyPalette} from 'https://unpkg.com/gifenc@1.0.3/dist/gifenc.esm.js';
+const $=i=>document.getElementById(i);
+let KEY='',MODEL='',FRAMES=[],DELAY=167,CURGIF=null,GALLERY=[],SESSION=[];
+
+const STYLES=['ultra realistic','cinematic','anime','comic book','dreamcore','vhs retro'];
+const chips=$('chips');let CHIP='';
+STYLES.forEach(s=>{const c=document.createElement('div');c.className='chip';c.textContent=s;
+c.onclick=()=>{document.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));c.classList.add('on');CHIP=s;};chips.appendChild(c);});
+
+const IMGCAND=['gemini-2.5-flash-image','gemini-2.0-flash-preview-image-generation','gemini-2.5-flash-image-preview'];
+const IMGCAND_PRED=['imagen-4.0-fast-generate-001','imagen-3.0-generate-002'];
+
+function stat(t,e){const s=$('status');s.textContent=t;s.className=e?'err':'';s.id='status';}
+function estat(t,e){const s=$('estatus');s.textContent=t;s.style.color=e?'#ff7a7a':'';}
+
+$('kgo').onclick=async()=>{
+  const k=$('kin').value.trim();if(!k)return ks('paste your key first',1);
+  ks('checking your key…');
+  try{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(k));
+    const j=await r.json();
+    if(!r.ok)return ks('Google said: '+(j.error&&j.error.message||r.status),1);
+    KEY=k;localStorage.setItem('gif_key',k);
+    enter();
+  }catch(e){ks('network error checking the key',1);}
+};
+function ks(t,e){$('kstat').textContent=t;$('kstat').style.color=e?'#ff7a7a':'';}
+
+function enter(){$('setup').classList.add('hide');$('app').classList.remove('hide');$('tabs').classList.remove('hide');loadGallery();}
+if(localStorage.getItem('gif_key')){KEY=localStorage.getItem('gif_key');enter();}
+
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#tabs button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  ['make','gifs','edit'].forEach(t=>$('tab-'+t).classList.toggle('hide',t!==b.dataset.t));
+});
+
+function scale(c,maxW){
+  const s=Math.min(1,maxW/c.width);const o=document.createElement('canvas');
+  o.width=Math.round(c.width*s);o.height=Math.round(c.height*s);
+  o.getContext('2d').drawImage(c,0,0,o.width,o.height);return o;
+}
+function b64Canvas(b64){
+  const img=new Image();img.src='data:image/png;base64,'+b64;
+  return new Promise((ok,no)=>{img.onload=()=>{const c=document.createElement('canvas');c.width=img.width;c.height=img.height;c.getContext('2d').drawImage(img,0,0);ok(c);};img.onerror=no;});
+}
+
+async function callImg(prompt,prev){
+  // gemini generateContent models
+  for(const m of IMGCAND){
+    try{
+      const body={contents:[{role:'user',parts:prev?[{text:prompt},{inlineData:{mimeType:'image/png',data:prev}}]:[{text:prompt}]}]};
+      if(m.indexOf('preview-image-generation')>-1)body.generationConfig={responseModalities:['TEXT','IMAGE']};
+      const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+m+':generateContent?key='+encodeURIComponent(KEY),
+        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const j=await r.json();
+      if(!r.ok){if(r.status===404)continue;throw {msg:(j.error&&j.error.message||('HTTP '+r.status)),code:r.status};}
+      const parts=(j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[];
+      const p=parts.find(x=>x.inlineData);
+      if(p)return{b64:p.inlineData.data,model:m};
+      continue;
+    }catch(e){if(e&&e.code&&e.code!==404&&e.code!==429&&e.code!==403)continue;lastMsg=e&&e.msg||lastMsg;}
+  }
+  // imagen predict models
+  for(const m of IMGCAND_PRED){
+    try{
+      const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+m+':predict?key='+encodeURIComponent(KEY),
+        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instances:[{prompt}],parameters:{sampleCount:1}})});
+      const j=await r.json();
+      if(!r.ok){if(r.status===404)continue;throw {msg:(j.error&&j.error.message||('HTTP '+r.status)),code:r.status};}
+      const p=j.predictions&&j.predictions[0];
+      if(p&&p.bytesBase64Encoded)return{b64:p.bytesBase64Encoded,model:m};
+    }catch(e){}
+  }
+  return null;
+}
+let lastMsg='';
+
+$('gen').onclick=async()=>{
+  const base=$('prompt').value.trim();
+  if(!base)return stat('type a prompt first',1);
+  const n=+$('nf').value;DELAY=+$('fps').value;
+  const style=CHIP?(' Style: '+CHIP+'.'):'';
+  $('gen').disabled=true;$('mk').classList.add('hide');$('gifbox').classList.add('hide');
+  FRAMES=[];$('strip').innerHTML='';
+  let prev=null;
+  for(let i=0;i<n;i++){
+    stat('generating frame '+(i+1)+' of '+n+'…');
+    let p;
+    if(i===0)p=base+style+' One single still image.';
+    else{const drift=['camera pushes in a little','the subject shifts slightly, motion continues','camera drifts gently sideways','a subtle new movement in the same scene','light and motion advance one step','slight follow-through of the previous motion'][ (i-1)%6 ];
+      p='Same exact scene, same characters, same lighting. Next motion beat: '+drift+'.'+(style?' '+style:'');}
+    const r=await callImg(p,prev);
+    if(!r){
+      $('gen').disabled=false;
+      const m=lastMsg||'';
+      stat(m.indexOf('429')>-1||m.toLowerCase().indexOf('quota')>-1||m.toLowerCase().indexOf('free tier')>-1
+        ?'Google would not generate images on this key right now (free quota for image models is used up or image gen is paid on it). Your own-images mode still works free.'
+        :'image generation failed: '+m,1);
+      if(FRAMES.length)break;return;
+    }
+    const c=scale(await b64Canvas(r.b64),512);FRAMES.push(c);prev=r.b64;
+    const th=scale(c,110);th.className='';th.style.height='86px';$('strip').appendChild(th);
+  }
+  $('gen').disabled=false;
+  if(FRAMES.length>1){$('mk').classList.remove('hide');stat(FRAMES.length+' frames ready. hit MAKE THE GIF.');}
+  else stat('only got one frame — try again or use fewer styled prompts',1);
+};
+
+$('own').onclick=()=>$('ownf').click();
+$('ownf').onchange=async e=>{
+  DELAY=+$('fps').value;FRAMES=[];$('strip').innerHTML='';$('mk').classList.add('hide');$('gifbox').classList.add('hide');
+  const fs=[...e.target.files];
+  for(const f of fs){
+    const c=document.createElement('canvas');const img=new Image();img.src=URL.createObjectURL(f);
+    await new Promise(ok=>img.onload=ok);
+    c.width=img.naturalWidth;c.height=img.naturalHeight;c.getContext('2d').drawImage(img,0,0);
+    const s=scale(c,512);FRAMES.push(s);const th=scale(s,110);th.style.height='86px';$('strip').appendChild(th);
+  }
+  if(FRAMES.length){$('mk').classList.remove('hide');stat(FRAMES.length+' frames ready.');}
+};
+
+$('mk').onclick=()=>{
+  if(FRAMES.length<2)return;
+  const enc=GIFEncoder();
+  for(const f of FRAMES){
+    const d=f.getContext('2d').getImageData(0,0,f.width,f.height);
+    const pal=quantize(d.data,256);const ix=applyPalette(d.data,pal);
+    enc.writeFrame(ix,f.width,f.height,{palette:pal,delay:DELAY});
+  }
+  enc.finish();
+  const blob=new Blob([enc.bytes()],{type:'image/gif'});
+  CURGIF={blob,url:URL.createObjectURL(blob),w:FRAMES[0].width,h:FRAMES[0].height};
+  $('gifPrev').src=CURGIF.url;$('gifbox').classList.remove('hide');
+  stat('gif done — '+(blob.size/1024).toFixed(0)+' KB');
+};
+
+$('dl').onclick=()=>{if(!CURGIF)return;const a=document.createElement('a');a.download='gifforge_'+Date.now()+'.gif';a.href=CURGIF.url;a.click();};
+
+$('save').onclick=()=>{
+  if(!CURGIF)return;
+  const item={id:Date.now(),name:'gif '+new Date().toLocaleTimeString(),delay:DELAY,w:CURGIF.w,h:CURGIF.h,frames:FRAMES.slice(),ts:Date.now()};
+  SESSION.push(item);
+  const r=new FileReader();
+  r.onload=()=>{item.url=r.result;GALLERY.push({id:item.id,name:item.name,delay:item.delay,url:r.result,ts:item.ts});persist();renderGrid();stat('saved to the board');};
+  r.readAsDataURL(CURGIF.blob);
+};
+
+function persist(){
+  try{localStorage.setItem('gif_board',JSON.stringify(GALLERY.slice(-10)));}
+  catch(e){GALLERY.shift();try{localStorage.setItem('gif_board',JSON.stringify(GALLERY));}catch(_){}}
+}
+function loadGallery(){try{GALLERY=JSON.parse(localStorage.getItem('gif_board')||'[]');}catch(e){GALLERY=[];}renderGrid();}
+function renderGrid(){
+  const g=$('grid');g.innerHTML='';$('gempty').classList.toggle('hide',GALLERY.length>0);
+  GALLERY.slice().reverse().forEach(it=>{
+    const d=document.createElement('div');d.className='gitem';
+    const im=document.createElement('img');im.src=it.url;d.appendChild(im);
+    const x=document.createElement('div');x.className='del';x.textContent='✕';
+    x.onclick=()=>{GALLERY=GALLERY.filter(z=>z.id!==it.id);SESSION=SESSION.filter(z=>z.id!==it.id);persist();renderGrid();renderOrder();};
+    d.appendChild(x);
+    im.onclick=()=>{const a=document.createElement('a');a.download='gifforge_'+it.id+'.gif';a.href=it.url;a.click();};
+    g.appendChild(d);
+  });
+}
+
+/* EDIT: music beats + gif timeline */
+let MUS=null,ac=null,ORD=[];
+$('mus').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;estat('reading the song…');
+  try{
+    ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+    const buf=await ac.decodeAudioData(await f.arrayBuffer());
+    const ch=buf.getChannelData(0),sr=buf.sampleRate,hop=Math.floor(sr*0.01),n=Math.floor(ch.length/hop);
+    const en=new Float32Array(n);
+    for(let i=0;i<n;i++){let s=0;for(let j=0;j<hop;j++){const v=ch[i*hop+j]||0;s+=v*v;}en[i]=Math.sqrt(s/hop);}
+    const es=new Float32Array(n);const w=8;
+    for(let i=0;i<n;i++){let s=0,c=0;for(let j=-w;j<=w;j++){const k=i+j;if(k>=0&&k<n){s+=en[k];c++;}}es[i]=s/c;}
+    let avg=0;for(let i=0;i<n;i++)avg+=es[i];avg/=n;
+    const beats=[];let last=-1;
+    for(let i=1;i<n-1;i++){
+      if(es[i]>avg*1.5&&es[i]>=es[i-1]&&es[i]>es[i+1]){const t=i*0.01;if(last<0||t-last>0.28){beats.push(t);last=t;}}
+    }
+    MUS={buf,name:f.name,beats,url:URL.createObjectURL(f)};
+    $('mstat').textContent=f.name+' · '+beats.length+' beats found';
+    $('exp').disabled=SESSION.length<1;
+    estat(beats.length?('cuts will snap to '+beats.length+' beats'):'no clear beats found — will cut on a steady 0.6s');
+  }catch(err){estat('could not read that audio file',1);}
+};
+$('imp').onclick=()=>$('impf').click();
+$('impf').onchange=async e=>{
+  for(const f of [...e.target.files]){
+    try{
+      if(!('ImageDecoder' in window))throw 0;
+      const d=new ImageDecoder({data:await f.arrayBuffer(),type:'image/gif'});
+      await d.tracks.ready;await d.completed;
+      const fr=[];let dur=0;
+      for(let i=0;i<d.track.frameCount;i++){
+        const r=await d.decode({frameIndex:i});
+        const c=document.createElement('canvas');c.width=r.image.displayWidth;c.height=r.image.displayHeight;
+        c.getContext('2d').drawImage(r.image,0,0);fr.push(c);
+        dur+=(r.image.duration||100000);
+      }
+      SESSION.push({id:Date.now()+Math.random(),name:f.name,delay:Math.max(40,dur/fr.length),frames:fr,url:'',w:fr[0].width,h:fr[0].height});
+    }catch(err){estat('this browser cannot decode that gif for editing — gifs made in this session always work',1);}
+  }
+  renderOrder();$('exp').disabled=SESSION.length<1;
+};
+function renderOrder(){
+  const o=$('ord');o.innerHTML='';
+  SESSION.forEach((it,i)=>{
+    const r=document.createElement('div');r.className='ord';
+    const im=document.createElement('img');if(it.url)im.src=it.url;else if(it.frames)im.src=it.frames[0].toDataURL();r.appendChild(im);
+    const nm=document.createElement('div');nm.className='nm';nm.textContent=(i+1)+'. '+it.name;r.appendChild(nm);
+    const up=document.createElement('button');up.textContent='↑';up.className='sec';up.onclick=()=>{if(i>0){[SESSION[i-1],SESSION[i]]=[SESSION[i],SESSION[i-1]];renderOrder();}};
+    const dn=document.createElement('button');dn.textContent='↓';dn.className='sec';dn.onclick=()=>{if(i<SESSION.length-1){[SESSION[i+1],SESSION[i]]=[SESSION[i],SESSION[i+1]];renderOrder();}};
+    r.appendChild(up);r.appendChild(dn);o.appendChild(r);
+  });
+}
+$('shape').onchange=renderOrder;
+
+function buildSlots(){
+  const p=+$('pace').value;
+  let iv=0.6;
+  if(MUS&&MUS.beats.length>1){const ds=[];for(let i=1;i<MUS.beats.length;i++)ds.push(MUS.beats[i]-MUS.beats[i-1]);ds.sort((a,b)=>a-b);iv=ds[Math.floor(ds.length/2)];}
+  iv*=p;
+  const start=MUS&&MUS.beats.length?MUS.beats[0]:0;
+  const dur=Math.min(90,MUS?MUS.buf.duration:iv*SESSION.length*4);
+  const slots=[];let t=start;
+  while(t+iv<=dur){slots.push({t,d:iv});t+=iv;}
+  if(!slots.length)slots.push({t:start,d:Math.min(dur,iv)});
+  return slots;
+}
+$('exp').onclick=()=>{
+  if(!MUS||SESSION.length<1)return estat('need your music and at least one gif (made or imported this session)',1);
+  const slots=buildSlots(),sh=$('shape').value;
+  const W=sh==='v'?720:sh==='w'?1280:900,H=sh==='v'?1280:sh==='w'?720:900;
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;const ctx=cv.getContext('2d');
+  $('vprev').style.display='block';
+  const stream=cv.captureStream(30);
+  const audioEl=new Audio();audioEl.src=MUS.url;audioEl.crossOrigin='anonymous';
+  let mr;
+  try{
+    const mimes=['video/mp4','video/webm;codecs=vp9','video/webm'];
+    const mime=mimes.find(m=>window.MediaRecorder&&MediaRecorder.isTypeSupported(m))||'';
+    mr=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:4000000}:{});
+  }catch(e){return estat('recording not supported in this browser',1);}
+  const chunks=[];mr.ondataavailable=e=>chunks.push(e.data);
+  mr.onstop=()=>{
+    const b=new Blob(chunks,{type:mr.mimeType||'video/webm'});
+    $('vprev').src=URL.createObjectURL(b);
+    const a=document.createElement('a');a.download='gifforge_edit.'+((mr.mimeType||'').indexOf('mp4')>-1?'mp4':'webm');a.href=$('vprev').src;a.click();
+    estat('edit exported — saved to your downloads');
+  };
+  audioEl.onended=()=>{};
+  mr.start(250);
+  audioEl.currentTime=0;audioEl.play();
+  const t0=performance.now();
+  (function loop(){
+    const t=(performance.now()-t0)/1000;
+    const end=slots[slots.length-1].t+slots[slots.length-1].d;
+    if(t>=end){try{mr.stop();}catch(e){}audioEl.pause();return;}
+    let s=slots[0];for(const q of slots){if(t>=q.t)s=q;}
+    const it=SESSION[(slots.indexOf(s))%SESSION.length];
+    const per=it.delay/1000,fl=it.frames.length;
+    const tl=Math.max(0,t-s.t),cyc=tl%(per*fl),idx=Math.floor(cyc/per)%fl;
+    const c=it.frames[idx],sc=Math.max(W/c.width,H/c.height);
+    ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+    ctx.drawImage(c,(W-c.width*sc)/2,(H-c.height*sc)/2,c.width*sc,c.height*sc);
+    estat('recording… '+Math.min(100,Math.round(t/end*100))+'%');
+    requestAnimationFrame(loop);
+  })();
+};
+renderOrder();
+</script>
+</body>
+</html>
