@@ -65,7 +65,7 @@ label.lb{display:block;font-size:11px;letter-spacing:1.4px;color:var(--dim);marg
     <button id="kgo">START</button>
     <div id="kstat" class="tiny"></div>
   </div>
-  <div class="card tiny">GIF Forge has two engines: a built-in free AI engine that needs no key at all, and your own Gemini key for Google-quality images. Or skip AI entirely: your own photos as frames.</div>
+  <div class="card tiny">GIF Forge has two engines: a built-in free AI engine that needs no key at all, and your own Gemini key for Google-quality images. Got a photo? The MY PHOTO button turns it into frames with your prompt (free, no key). Or skip AI entirely: your own photos as frames.</div>
 </div>
 
 <div id="app" class="wrap hide">
@@ -86,6 +86,9 @@ label.lb{display:block;font-size:11px;letter-spacing:1.4px;color:var(--dim);marg
       <div style="height:8px"></div>
       <button class="sec" id="own">USE MY OWN IMAGES INSTEAD</button>
       <input id="ownf" type="file" accept="image/*" multiple class="hide">
+      <div style="height:8px"></div>
+      <button class="sec" id="refp">AI FRAMES FROM MY PHOTO (free, slower)</button>
+      <input id="reff" type="file" accept="image/*" class="hide">
       <div id="status"></div>
       <div class="strip" id="strip"></div>
       <button class="mg hide" id="mk">MAKE THE GIF</button>
@@ -264,6 +267,75 @@ $('ownf').onchange=async e=>{
     const s=scale(c,512);FRAMES.push(s);const th=scale(s,110);th.style.height='86px';$('strip').appendChild(th);
   }
   if(FRAMES.length){$('mk').classList.remove('hide');stat(FRAMES.length+' frames ready.');}
+};
+
+/* PHOTO MODE: reference photo + prompt through the free art queue */
+let REF=null;
+function urlCanvas(src){
+  return new Promise((ok,no)=>{const img=new Image();img.src=src;img.onload=()=>{const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;c.getContext('2d').drawImage(img,0,0);ok(c);};img.onerror=no;});
+}
+async function hordeImg2img(prompt){
+  const r=await fetch('https://aihorde.net/api/v2/generate/async',{method:'POST',
+    headers:{'apikey':'0000000000','Content-Type':'application/json','Client-Agent':'GIFForge:1.0:web'},
+    body:JSON.stringify({prompt,params:{n:1,width:512,height:512,steps:18,denoising_strength:0.55,cfg_scale:7},
+      source_image:REF,source_processing:'img2img',nsfw:false,censor_nsfw:true,models:['stable_diffusion'],r2:false})});
+  if(!r.ok)throw new Error('queue said '+r.status);
+  const j=await r.json();const id=j.id;
+  for(let i=0;i<90;i++){
+    await new Promise(ok=>setTimeout(ok,7000));
+    const c=await fetch('https://aihorde.net/api/v2/generate/check/'+id);
+    const cj=await c.json();
+    if(cj.faulted)throw new Error('the worker gave up');
+    if(cj.done)break;
+  }
+  const sj=await (await fetch('https://aihorde.net/api/v2/generate/status/'+id)).json();
+  const g=(sj.generations||[])[0];
+  if(!g||!g.img)throw new Error('no image came back');
+  if(g.img.indexOf('http')===0){
+    const bb=await (await fetch(g.img)).blob();
+    return await new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>ok(fr.result);fr.onerror=no;fr.readAsDataURL(bb);});
+  }
+  return 'data:image/webp;base64,'+g.img;
+}
+async function genFromPhoto(){
+  const base=$('prompt').value.trim();
+  if(!base)return stat('type your prompt first — it tells the AI what to do with your photo',1);
+  const n=+$('nf').value;DELAY=+$('fps').value;
+  $('gen').disabled=true;$('refp').disabled=true;$('mk').classList.add('hide');$('gifbox').classList.add('hide');
+  FRAMES=[];$('strip').innerHTML='';
+  const beats=['','the subject shifts slightly and the motion continues','camera pushes in a little, light shifts','a subtle new movement in the same scene','the motion advances one more step','follow-through of the previous motion'];
+  for(let i=0;i<n;i++){
+    stat('photo mode: frame '+(i+1)+' of '+n+' — the free art queue is working, this lane is slower…');
+    const p=i===0?base+'. Style: cinematic.':'Same scene, same subject. '+base+'. '+beats[(i-1)%beats.length]+'.';
+    try{
+      const c=scale(await urlCanvas(await hordeImg2img(p)),512);
+      FRAMES.push(c);
+      const th=scale(c,110);th.style.height='86px';$('strip').appendChild(th);
+    }catch(err){
+      $('gen').disabled=false;$('refp').disabled=false;
+      stat('photo mode stalled: '+err.message+'. the free queue gets busy — try again in a bit.',1);
+      if(FRAMES.length)break;return;
+    }
+  }
+  $('gen').disabled=false;$('refp').disabled=false;
+  if(FRAMES.length>1){$('mk').classList.remove('hide');stat(FRAMES.length+' frames ready. hit MAKE THE GIF.');}
+  else stat('only got one frame — try again',1);
+}
+$('refp').onclick=()=>{
+  if(REF)return genFromPhoto();
+  $('reff').click();
+};
+$('reff').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  const img=new Image();img.src=URL.createObjectURL(f);
+  await new Promise(ok=>img.onload=ok);
+  const c=document.createElement('canvas');
+  const sc=Math.min(1,512/Math.max(img.naturalWidth,img.naturalHeight));
+  c.width=Math.round(img.naturalWidth*sc);c.height=Math.round(img.naturalHeight*sc);
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  REF=c.toDataURL('image/jpeg',0.82).split(',')[1];
+  $('refp').textContent='PHOTO LOADED — TAP TO GENERATE';
+  stat('reference photo loaded. now type your prompt and tap the button again.');
 };
 
 $('mk').onclick=()=>{
