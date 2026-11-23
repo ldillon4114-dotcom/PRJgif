@@ -193,13 +193,22 @@ function b64Canvas(b64){
   return new Promise((ok,no)=>{img.onload=()=>{const c=document.createElement('canvas');c.width=img.width;c.height=img.height;c.getContext('2d').drawImage(img,0,0);ok(c);};img.onerror=no;});
 }
 async function pollB64(prompt,seed){
-  const r=await fetch('https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=768&nologo=true&model=flux&seed='+seed);
-  if(!r.ok)throw new Error('HTTP '+r.status);
-  const img=new Image();img.src=URL.createObjectURL(await r.blob());
-  await new Promise((ok,no)=>{img.onload=ok;img.onerror=no;});
-  const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;
-  c.getContext('2d').drawImage(img,0,0);
-  return scale(c,512).toDataURL('image/png').split(',')[1];
+  let lastErr=null;
+  for(let a=0;a<4;a++){
+    if(a)await new Promise(ok=>setTimeout(ok,9000+a*7000));
+    try{
+      const r=await fetch('https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=768&nologo=true&model=flux&seed='+seed);
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const blob=await r.blob();
+      if((blob.type||'').indexOf('image')!==0)throw new Error('not an image');
+      const img=new Image();img.src=URL.createObjectURL(blob);
+      await new Promise((ok,no)=>{img.onload=ok;img.onerror=no;});
+      const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;
+      c.getContext('2d').drawImage(img,0,0);
+      return scale(c,512).toDataURL('image/png').split(',')[1];
+    }catch(e){lastErr=e;}
+  }
+  throw lastErr||new Error('no answer');
 }
 
 async function callImg(prompt,prev){
@@ -251,7 +260,9 @@ $('gen').onclick=async()=>{
     if(!r){try{r={b64:await pollB64(p,runSeed),model:'free'};}catch(e){r=null;}}
     if(!r){
       $('gen').disabled=false;
-      stat('both engines failed right now (your Gemini key said: '+(lastMsg||'no image quota')+' — and the free engine did not answer either). Your own-images mode always works free.',1);
+      stat(KEY
+        ?'both engines failed right now (your Gemini key said: '+(lastMsg||'no image quota')+' — and the free engine did not answer either). Your own-images mode always works free.'
+        :'the free engine would not answer right now (it slows down back-to-back frames). wait a minute and tap generate again, or use your own images.',1);
       if(FRAMES.length)break;return;
     }
     const c=scale(await b64Canvas(r.b64),512);FRAMES.push(c);prev=r.b64;
