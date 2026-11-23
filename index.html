@@ -59,13 +59,13 @@ label.lb{display:block;font-size:11px;letter-spacing:1.4px;color:var(--dim);marg
   <h1>GIF FORGE</h1>
   <div class="sub">AI image frames → animated gifs → edits synced to your music</div>
   <div class="card">
-    <label class="lb">Gemini API key (stays on this device)</label>
-    <input id="kin" type="password" placeholder="paste your Google AI Studio key" autocomplete="off">
+    <label class="lb">Gemini API key (optional — the built-in free engine needs no key)</label>
+    <input id="kin" type="password" placeholder="optional: paste your Google AI Studio key" autocomplete="off">
     <div style="height:10px"></div>
     <button id="kgo">START</button>
     <div id="kstat" class="tiny"></div>
   </div>
-  <div class="card tiny">GIF Forge also works with no AI at all: add your own photos as frames and it turns them into gifs. The AI shot generator uses your free Gemini key, image requests only.</div>
+  <div class="card tiny">GIF Forge has two engines: a built-in free AI engine that needs no key at all, and your own Gemini key for Google-quality images. Or skip AI entirely: your own photos as frames.</div>
 </div>
 
 <div id="app" class="wrap hide">
@@ -153,7 +153,8 @@ function stat(t,e){const s=$('status');s.textContent=t;s.className=e?'err':'';s.
 function estat(t,e){const s=$('estatus');s.textContent=t;s.style.color=e?'#ff7a7a':'';}
 
 $('kgo').onclick=async()=>{
-  const k=$('kin').value.trim();if(!k)return ks('paste your key first',1);
+  const k=$('kin').value.trim();
+  if(!k){localStorage.removeItem('gif_key');KEY='';return enter();}
   ks('checking your key…');
   try{
     const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(k));
@@ -181,6 +182,15 @@ function scale(c,maxW){
 function b64Canvas(b64){
   const img=new Image();img.src='data:image/png;base64,'+b64;
   return new Promise((ok,no)=>{img.onload=()=>{const c=document.createElement('canvas');c.width=img.width;c.height=img.height;c.getContext('2d').drawImage(img,0,0);ok(c);};img.onerror=no;});
+}
+async function pollB64(prompt,seed){
+  const r=await fetch('https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=768&nologo=true&model=flux&seed='+seed);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const img=new Image();img.src=URL.createObjectURL(await r.blob());
+  await new Promise((ok,no)=>{img.onload=ok;img.onerror=no;});
+  const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;
+  c.getContext('2d').drawImage(img,0,0);
+  return scale(c,512).toDataURL('image/png').split(',')[1];
 }
 
 async function callImg(prompt,prev){
@@ -221,20 +231,18 @@ $('gen').onclick=async()=>{
   const style=CHIP?(' Style: '+CHIP+'.'):'';
   $('gen').disabled=true;$('mk').classList.add('hide');$('gifbox').classList.add('hide');
   FRAMES=[];$('strip').innerHTML='';
-  let prev=null;
+  let prev=null;const runSeed=Math.floor(Math.random()*1e6);
   for(let i=0;i<n;i++){
     stat('generating frame '+(i+1)+' of '+n+'…');
     let p;
     if(i===0)p=base+style+' One single still image.';
     else{const drift=['camera pushes in a little','the subject shifts slightly, motion continues','camera drifts gently sideways','a subtle new movement in the same scene','light and motion advance one step','slight follow-through of the previous motion'][ (i-1)%6 ];
       p='Same exact scene, same characters, same lighting. Next motion beat: '+drift+'.'+(style?' '+style:'');}
-    const r=await callImg(p,prev);
+    let r=KEY?await callImg(p,prev):null;
+    if(!r){try{r={b64:await pollB64(p,runSeed),model:'free'};}catch(e){r=null;}}
     if(!r){
       $('gen').disabled=false;
-      const m=lastMsg||'';
-      stat(m.indexOf('429')>-1||m.toLowerCase().indexOf('quota')>-1||m.toLowerCase().indexOf('free tier')>-1
-        ?'Google would not generate images on this key right now (free quota for image models is used up or image gen is paid on it). Your own-images mode still works free.'
-        :'image generation failed: '+m,1);
+      stat('both engines failed right now (your Gemini key said: '+(lastMsg||'no image quota')+' — and the free engine did not answer either). Your own-images mode always works free.',1);
       if(FRAMES.length)break;return;
     }
     const c=scale(await b64Canvas(r.b64),512);FRAMES.push(c);prev=r.b64;
