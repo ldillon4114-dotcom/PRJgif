@@ -140,8 +140,14 @@ label.lb{display:block;font-size:11px;letter-spacing:1.4px;color:var(--dim);marg
 </div>
 
 <script type="module">
-import {GIFEncoder,quantize,applyPalette} from 'https://unpkg.com/gifenc@1.0.3/dist/gifenc.esm.js';
 const $=i=>document.getElementById(i);
+let giflib=null;
+async function getGiflib(){
+  if(giflib)return giflib;
+  try{giflib=await import('https://unpkg.com/gifenc@1.0.3/dist/gifenc.esm.js');}
+  catch(e){giflib=await import('https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js');}
+  return giflib;
+}
 let KEY='',MODEL='',FRAMES=[],DELAY=167,CURGIF=null,GALLERY=[],SESSION=[];
 
 const STYLES=['ultra realistic','cinematic','anime','comic book','dreamcore','vhs retro'];
@@ -338,8 +344,9 @@ $('reff').onchange=async e=>{
   stat('reference photo loaded. now type your prompt and tap the button again.');
 };
 
-$('mk').onclick=()=>{
+$('mk').onclick=async()=>{
   if(FRAMES.length<2)return;
+  const {GIFEncoder,quantize,applyPalette}=await getGiflib();
   const enc=GIFEncoder();
   for(const f of FRAMES){
     const d=f.getContext('2d').getImageData(0,0,f.width,f.height);
